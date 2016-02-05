@@ -18,7 +18,7 @@
 using namespace std;
 // Consstruct a new RandomWalk object and hook up this ROS node
 // to the simulated robot's velocity control and laser topics
-AFRL_Driver::AFRL_Driver(ros::NodeHandle& nh) : fsm(FSM_MOVE_FORWARD){
+AFRL_Driver::AFRL_Driver(ros::NodeHandle& nh) {
     PIDTimer = nh.createTimer(ros::Duration(0.1), &AFRL_Driver::PID_control, this);
     commandPub = nh.advertise<geometry_msgs::Twist>("/mobile_base/commands/velocity", 1); 
     laserSub = nh.subscribe("scan", 1, &AFRL_Driver::commandCallBack, this);
@@ -35,13 +35,13 @@ void AFRL_Driver::bumperCallBack(const kobuki_msgs::BumperEvent::ConstPtr& msg) 
     if(msg->state == kobuki_msgs::BumperEvent::PRESSED) {
         switch(msg->bumper) {
             case kobuki_msgs::BumperEvent::LEFT:
-                turnOdom(true, M_PI/4, true);
+                turnOdom(true, 25, true);
                 break;
             case kobuki_msgs::BumperEvent::RIGHT:
-                turnOdom(false, M_PI/4, true);
+                turnOdom(false, 25, true);
                 break;
             case kobuki_msgs::BumperEvent::CENTER:
-                turnOdom(true, M_PI/4, true);
+                turnOdom(true, 25, true);
                 break;
         }
     }
@@ -57,31 +57,39 @@ void AFRL_Driver::move(double linearVelMPS, double angularVelRadPS) {
 
 // Process the incoming laser scan message
 void AFRL_Driver::commandCallBack(const sensor_msgs::LaserScan::ConstPtr& msg) {
-    if (fsm == FSM_MOVE_FORWARD) {
-        double midDist = msg->ranges[MSG_RANGES_MAX / 2]; // Half of max distance
+
+        this->rangesMin = 0;
+        this->rangesMax = msg->ranges.size() - 1;
+
+        double midDist = msg->ranges[this->rangesMax / 2]; // Half of max distance
 
         // Since the hokuyo sensor has a 180 degree range, we device the max range
         // by a number to get a degree offset. To get the number, just divide your 
         // sensors max angle by the degree you want to pick up from, then replace
         // the result into MSG_ANGLE_OFFSET
-        double rightDist = msg->ranges[MSG_RANGES_MIN + (MSG_RANGES_MAX * MSG_RANGES_OFFSET / MSG_RANGES_ANGLE)];
-        double leftDist = msg->ranges[MSG_RANGES_MAX - (MSG_RANGES_MAX * MSG_RANGES_OFFSET / MSG_RANGES_ANGLE)];
+        double rightDist = msg->ranges[this->rangesMin + (this->rangesMax * MSG_RANGES_OFFSET / MSG_RANGES_ANGLE)];
+        double leftDist = msg->ranges[this->rangesMax - (this->rangesMax * MSG_RANGES_OFFSET / MSG_RANGES_ANGLE)];
 
         // If our middle most distances is less then 0.5, then there is something right infront
         // of the bot and we should stop and turn.
-        if(midDist < 0.5)
-            turnOdom(true, M_PI/4, true);
+        if(midDist < PROXIMITY_RANGE_MIN)
+            turnOdom(true, 45, true);
 
         // if the left or the rihght distance from the laser scan goes to infinity, 
         // then we set this to the greatest scan range possible, otherwise it could
         // make the PID controller go funky. 
-        if(isinf(rightDist)) rightDist = PROXIMITY_RANGE_M;
-        if(isinf(leftDist)) leftDist = PROXIMITY_RANGE_M;
+        if(isinf(rightDist)) rightDist = PROXIMITY_RANGE_MAX;
+        if(isinf(leftDist)) leftDist = PROXIMITY_RANGE_MAX;
 
+        if(leftDist == PROXIMITY_RANGE_MAX || rightDist == PROXIMITY_RANGE_MAX)
+            ROS_INFO_STREAM("MAXED");
+
+#ifdef DEBUG_MSG
         ROS_INFO_STREAM("\n\n[##############################################");
         ROS_INFO_STREAM("Left Dist: " << leftDist);
         ROS_INFO_STREAM("Right Dist: " << rightDist);
         ROS_INFO_STREAM("Middle Dist: " << midDist);
+#endif
 
         // Throw out NANs. You may not want to use this if you use a sensor with a minimum range
         // such as the kinect. TODO add this as a toggleable condition. 
@@ -90,10 +98,22 @@ void AFRL_Driver::commandCallBack(const sensor_msgs::LaserScan::ConstPtr& msg) {
             errors.pop_back();
             errors.insert(errors.begin(), e);
         }
-    }
 }
 
-bool AFRL_Driver::turnOdom(bool clockwise, double radians, bool backtrack) {
+
+/* Method for turning the robot a certain distance, with the enableing of going
+ * backwards and turning either clockwise or counter clockwise. 
+ *
+ * TODO: Make this the main movement method and remove void move(). Also take this
+ * out of a sleeping loop and turn it into a callback method.
+ */
+bool AFRL_Driver::turnOdom(bool clockwise, double angle, bool backtrack) {
+    bool done = false;
+    double radians = angle * M_PI/180;
+    
+#ifdef DEBUG_MSG
+    ROS_INFO_STREAM("Turning " << angle);
+#endif
 
     while(radians < 0) radians += 2*M_PI;
     while(radians > 2*M_PI) radians -= 2*M_PI;
@@ -108,9 +128,10 @@ bool AFRL_Driver::turnOdom(bool clockwise, double radians, bool backtrack) {
             ros::Time(0), start_transform);
 
     geometry_msgs::Twist base_cmd;
-    base_cmd.linear.x = base_cmd.linear.y = 0.0;
 
-    if(backtrack == true) base_cmd.linear.x = base_cmd.linear.y = -0.1;
+
+    if(backtrack == true) base_cmd.linear.x = base_cmd.linear.y = REVERSE_SPEED_MPS;
+    else base_cmd.linear.x = base_cmd.linear.y = 0.0;
 
     base_cmd.angular.z = ROTATE_SPEED_RADPS;
     if (clockwise) base_cmd.angular.z = -base_cmd.angular.z;
@@ -118,8 +139,7 @@ bool AFRL_Driver::turnOdom(bool clockwise, double radians, bool backtrack) {
     tf::Vector3 desired_turn_axis(0,0,1);
     if (clockwise == false) desired_turn_axis = -desired_turn_axis;
 
-    bool done = false;
-    while (!done ) {
+    while (!done && ros::ok()) {
         commandPub.publish(base_cmd);
 
         listener_.lookupTransform("base_footprint", "odom", ros::Time(0), current_transform);
@@ -133,12 +153,13 @@ bool AFRL_Driver::turnOdom(bool clockwise, double radians, bool backtrack) {
         if ( actual_turn_axis.dot( desired_turn_axis ) < 0 ) 
             angle_turned = 2 * M_PI - angle_turned;
 
-        if (angle_turned > radians) done = true;
+        if (angle_turned > radians) return true;
     }
-    if (done) return true;
+
     return false;
 }
 
+/* Method for quick summation of the errors vector. */
 double AFRL_Driver::summation() {
     double tot = 0;
     for(int i = 0; i < PID_VECTOR_SIZE; i++)
@@ -147,7 +168,9 @@ double AFRL_Driver::summation() {
     return tot;
 }
 
-
+/* Method for calculating all the gains for the PID controller and based on the resulting error,
+ * determine the control variable of where the robot needs to adjust.
+ */
 void  AFRL_Driver::PID_control(const ros::TimerEvent& e) {
     double previousError = errors[0] * Kp;
     double integral = summation() * Ki;
@@ -177,28 +200,31 @@ void  AFRL_Driver::PID_control(const ros::TimerEvent& e) {
 
     // Store the previous total error. Used for when the error suddenly flips 
     // signs and the control needs to be reset to the base of 0.
-    pError = error; 
+    pError = error;
+#ifdef DEBUG_MSG
     ROS_INFO_STREAM("Error: " << error);
     ROS_INFO_STREAM("Control: " << control);
+#endif
 }
 
-// Main FSM loop for ensuring that ROS messages are
-// processed in a timely manner, and also for sending
-// velocity controls to the simulated robot based on the FSM state
+/*  Main spin method. Drives the robot forward by default and activates the PID controller. 
+ *  Various triggers in the call backs will pause the loop and have the robot rotate or 
+ *  reverse its direction.
+ */
 void  AFRL_Driver::spin() {
-    ros::Rate rate(10); // Specify the FSM looprate in Hz
+    ros::Rate rate(20); // Specify the looprate in Hz
 
     while (ros::ok()) { // Keep spinning loop until user presses Ctrl+C
         move(FORWARD_SPEED_MPS, control);
         ros::spinOnce(); // Need to call this function often to allow ROS to process incomingmessages
-        rate.sleep(); // Sleep for the rest of the cycle, to enforce the FSM loop rate
+        rate.sleep(); // Sleep for the rest of the cycle, to enforce the loop rate
     }
 }
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "AFRL_Driver");
     ros::NodeHandle n;
-    AFRL_Driver walker(n); // Create new random walk object
-    walker.spin(); // Execute FSM loop
+    AFRL_Driver walker(n); 
+    walker.spin(); 
     return 0;
 }

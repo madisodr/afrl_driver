@@ -29,7 +29,8 @@ catkin_package(
 )
 
 
+
+
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-add_executable(driver src/driver.cpp)
-target_link_libraries(driver ${catkin_LIBRARIES})
-add_dependencies(driver beginner_tutorials_generate_messages_cpp)
+add_executable(Driver src/driver.cpp)
+target_link_libraries(Driver ${catkin_LIBRARIES})

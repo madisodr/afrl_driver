@@ -28,7 +28,7 @@ static const int PID_VECTOR_SIZE = 2; // How big the error vector should be.
 const static double Kp = 0.8; // Proportional gain
 const static double Kd = 0.5; // Derivative gain
 const static double Ki = 0.05; // Integral gain
-const static double CONTROL_THRESHOLD = 0.5;
+const static double CONTROL_THRESHOLD = 0.1;
 
 const static double MIN_SCAN_ANGLE_RAD = -1.57079637051;
 const static double MAX_SCAN_ANGLE_RAD = 1.57079637051;        

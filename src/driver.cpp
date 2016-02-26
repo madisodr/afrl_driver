@@ -35,7 +35,8 @@ AFRL_Driver::AFRL_Driver(ros::NodeHandle& nh) {
 void AFRL_Driver::commsCallBack(std_msgs::UInt8 comm) {
 
     int s = comm.data;
-
+    if(this->tagState != s)
+        ROS_INFO_STREAM("TAG STATE CHANGED: " << this->tagState);
     switch(s) {
         case TAG_NULL:
             this->setTagState(TAG_NULL);
@@ -241,7 +242,6 @@ void  AFRL_Driver::spin() {
     while (ros::ok()) { // Keep spinning loop until user presses Ctrl+C
 
         if(TAG_FINDING) {
-            ROS_INFO_STREAM("TAG STATE: " << this->tagState);
             if(this->tagState == TAG_NULL || this->tagState == TAG_LOST) {
                 this->PID_clear();
                 this->move(0, 0);

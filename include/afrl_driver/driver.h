@@ -10,8 +10,6 @@
 #include "sensor_msgs/LaserScan.h"
 #include "kobuki_msgs/BumperEvent.h"
 #include <vector>
-#include <cstdlib> // Needed for rand()
-#include <ctime> // Needed to seed random number generator with a time value
 #include "std_msgs/UInt8.h"
 
 #ifndef AFRL_DRIVER_H
@@ -19,33 +17,35 @@
 
 #define DEBUG_MSG 0
 
-#define TAG_NULL 0
-#define TAG_FOUND 1
-#define TAG_LOST 2
+
+// TAG PARAMETERS
+enum TAG_STATES {
+    TAG_NULL,
+    TAG_FOUND,
+    TAG_LOST
+};
+
+static const bool TAG_FINDING = false;
 
 // PID Controller and tuning paramaters
-static const int PID_VECTOR_SIZE = 2; // How big the error vector should be.
 const static double Kp = 0.8; // Proportional gain
 const static double Kd = 0.5; // Derivative gain
 const static double Ki = 0.05; // Integral gain
-const static double CONTROL_THRESHOLD = 0.1;
+const static double CONTROL_THRESHOLD = 0.05;
 
-const static double MIN_SCAN_ANGLE_RAD = -1.57079637051;
-const static double MAX_SCAN_ANGLE_RAD = 1.57079637051;        
 // Max distance of the laser scan topic. In Meters
 const static double PROXIMITY_RANGE_MAX = 5.9;
 // Closet distance you want the laserscan topic to record before issueing a backup command. In meters.
-const static double PROXIMITY_RANGE_MIN = 0.25;
+const static double PROXIMITY_RANGE_MIN = 0.2;
 
 // Robot movement 
 const static double FORWARD_SPEED_MPS = 0.2; // Forward speed.
-const static double REVERSE_SPEED_MPS = -0.1; // Reverse speed. Must be negative.
+const static double REVERSE_SPEED_MPS = -0; // Reverse speed. Must be negative.
 const static double REVERSE_ANGLE_DEGS = 45;
-const static double ROTATE_SPEED_RADPS = 0; // Rotate speed in Radians/Second
 const static double ROTATE_CONTROL_STEP = 0.05; // step at which to increment the control of the PID
 
 const static int MSG_RANGES_ANGLE = 180; // Max Angle of the sensor. 
-const static int MSG_RANGES_OFFSET = 35; // Offset angle at which to take data from.
+const static int MSG_RANGES_OFFSET = 45; // Offset angle at which to take data from.
 
 using namespace std;
 
@@ -64,10 +64,13 @@ class AFRL_Driver {
 
         // PID Functions
         void PID_control(const ros::TimerEvent& e);
+        void PID_clear();
+
+        // TAG Functions
+        void setTagState(int s) { this->tagState = s; }
         
         // ROS Functions
         void spin();
-
         void plotStart();
         void plotIntersection();
 
@@ -79,9 +82,8 @@ class AFRL_Driver {
         double prev_error;
         double error_sum;
 
-        int rangesMax;
-        int rangesMin;
-
+        int tagState;
+ 
     protected:
         ros::Publisher commandPub; // Publisher to the robot's velocity command topic
         ros::Subscriber laserSub; // Subscriber to the robot's laser scan topic

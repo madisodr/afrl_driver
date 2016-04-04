@@ -34,3 +34,6 @@ catkin_package(
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_executable(Driver src/driver.cpp)
 target_link_libraries(Driver ${catkin_LIBRARIES})
+
+add_executable(Patterns src/patterns.cpp)
+target_link_libraries(Patterns ${catkin_LIBRARIES})

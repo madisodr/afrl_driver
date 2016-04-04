@@ -15,7 +15,7 @@
 #ifndef AFRL_DRIVER_H
 #define AFRL_DRIVER_H
 
-#define DEBUG_MSG 0
+#define DEBUG_MSG 1
 
 
 // TAG PARAMETERS
@@ -40,7 +40,7 @@ const static double PROXIMITY_RANGE_MIN = 0.2;
 
 // Robot movement 
 const static double FORWARD_SPEED_MPS = 0.2; // Forward speed.
-const static double REVERSE_SPEED_MPS = -0; // Reverse speed. Must be negative.
+const static double REVERSE_SPEED_MPS = -0.1; // Reverse speed. Must be negative.
 const static double REVERSE_ANGLE_DEGS = 45;
 const static double ROTATE_CONTROL_STEP = 0.05; // step at which to increment the control of the PID
 
@@ -93,13 +93,11 @@ class AFRL_Driver {
         ros::Subscriber commsSub; // Communication subscriber
         //ros::Publisher commsPub; // Communication publisher
 
-
         ros::Time prev;
         ros::Duration dt;
         ros::Time rotateStartTime; // Start time of the rotation
         ros::Duration rotateDuration; // Duration of the rotation
         ros::Timer PIDTimer;
-
 };
 
 #endif

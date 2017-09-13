@@ -3,11 +3,6 @@ project(afrl_driver)
 
 find_package(PkgConfig REQUIRED)
 
-include_directories(
-    include
-    ${catkin_INCLUDE_DIRS}
-)
-
 
 find_package(catkin REQUIRED COMPONENTS
     geometry_msgs
@@ -28,7 +23,10 @@ catkin_package(
     DEPENDS system_lib
 )
 
-
+include_directories(
+    include
+    ${catkin_INCLUDE_DIRS}
+)
 
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
